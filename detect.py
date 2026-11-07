@@ -31,14 +31,14 @@ _LEVELS = {"low": 0, "medium": 1, "high": 2}
 _OPENERS = re.compile(
     r"^\s*(?:no+\b(?!\s+(?:need|worries|problem|rush|pressure)\b)|nope\b|nah\b|wrong\b|incorrect\b|not quite\b|not what i\b|that'?s (?:not|wrong|incorrect)\b"
     r"|that is (?:not|wrong)\b|this is (?:not|wrong)\b|you (?:forgot|missed|ignored|didn'?t)\b|actually\b"
-    r"|stop\b|don'?t\b|do not\b|why did you\b|i said\b|i asked\b|i told you\b|wait\b|hmm,? no\b|ugh\b)",
+    r"|stop (?:doing|using|adding|making|saying|changing)\b|don'?t\b(?!\s+worry)|do not\b|why did you\b|i said\b|i asked\b|i told you\b|wait\b|hmm,? no\b|ugh\b)",
     re.IGNORECASE,
 )
 
 # Redirects that can appear anywhere in a short message.
 _REDIRECTS = re.compile(
     r"\b(?:use \S+(?: \S+)? (?:not|instead of) \S+|instead of \S+|rather than \S+|not \S+,? (?:but|use)\b"
-    r"|should (?:be|have been|use)\b|supposed to\b|try again\b|redo\b|fix (?:it|that|this)\b|that broke\b"
+    r"|(?<!what )(?<!which )(?<!how )should (?:be|have been|use)\b|supposed to\b|redo\b|that broke\b"
     r"|still (?:wrong|broken|failing|too \w+)\b|^(?:this|that|it)(?:'s| is| was) too \w+\b"
     r"|doesn'?t work\b|didn'?t work\b|not working\b)",
     re.IGNORECASE,
@@ -49,7 +49,8 @@ _ANSWER_WORDS = re.compile(r"^\s*(?:no|nope|nah|not now|no thanks|no thank you|d
 
 _QUESTION_START = re.compile(r"^\s*(?:how|what|where|when|which|can you|could you|would you)\b", re.IGNORECASE)
 
-_THANKS = re.compile(r"^\s*(?:thanks|thank you|thx|ty|great|perfect|nice|cool|ok|okay|got it)\b", re.IGNORECASE)
+_THANKS = re.compile(r"^\s*(?:thanks|thank you|thx|ty|great|perfect|nice|cool|ok|okay|got it"
+                     r"|yes|yeah|yep|yup|sure|let'?s|and|also|dont worry|don'?t worry)\b", re.IGNORECASE)
 
 
 def _norm(text: str) -> str:
