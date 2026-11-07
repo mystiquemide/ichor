@@ -61,7 +61,7 @@ Live history shapes on Hermes v0.23.0: a normal turn grows history by 2 or more;
 
 ## Reply claiming
 
-A message is claimed only if all of these hold: it is exactly `k`, `s`, `d`, `keep`, `share` or `discard` (case-insensitive); it arrives in a direct chat; it is within 120 s of a card; and exactly one card window is open on that platform. `post_gateway_admission` has no session id, so the one-open-window rule prevents a reply in one chat from changing a pair from another. When the rule can't decide, the message reaches the agent and `/ichor keep <id>` remains available.
+A message is claimed only if all of these hold: it is exactly `k`, `s`, `d`, `keep`, `share` or `discard` (case-insensitive); it arrives in a direct chat; it is within 120 s of a card; and that card is the only open window on the platform. A plugin can't learn which chat a turn belongs to through public APIs, so this rule is what stops a reply in one chat from settling another chat's pair. `ReplyWindows` already accepts a route key and settles the newest card in the same chat when one is given, ready for a public seam. When nothing matches, the message reaches the agent and `/ichor keep <id>` remains available.
 
 ## Storage
 
@@ -80,4 +80,4 @@ settings(key, value)        -- global_off, hf_repo, hf_private
 
 ## Failure behavior
 
-Every hook body is wrapped and fails open. Network is used only by `/ichor share`, with a 30 s timeout, and errors come back as a short message. Scrubber patterns are bounded so 50k-character hostile inputs scrub in well under a second (`tests/test_scrub_perf.py`).
+Every hook body is wrapped and fails open. Network is used only by `/ichor share`, with a 30 s timeout, and errors come back as a short message. Each field is cut at 20,000 characters before scrubbing, and the patterns are bounded, so hostile 50k-character inputs scrub in well under a second (`tests/test_scrub_perf.py`). History that drops by more than 6 messages is treated as compression or a reset, never an undo.

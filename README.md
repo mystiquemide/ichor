@@ -110,8 +110,9 @@ This proves the format and the pipeline. Two pairs on a tiny model don't teach a
 Ichor sits in every turn, so it is built to never get in the way.
 
 - It only observes. Every hook is wrapped and fails open: if Ichor errors, Hermes carries on as if it weren't installed.
-- It adds no delay. Detection runs after the answer, and the optional label runs on a background thread.
-- Short replies are claimed only in direct chats, only within 120 seconds of a card, only for the exact words `k`, `s`, `d`, `keep`, `share` or `discard`, and only when exactly one card is open. Anything else reaches Hermes untouched. Group chats are never touched.
+- It stays fast. Detection and scrubbing take milliseconds, input over 20,000 characters is cut first, and the patterns are bounded so hostile 50k-character text can't stall a turn. The optional label runs on a background thread. The only wait is posting the card itself.
+- Short replies are claimed only in direct chats, only within 120 seconds of a card, only for the exact words `k`, `s`, `d`, `keep`, `share` or `discard`, and only while that card is the single one open on the platform. Anything else reaches Hermes untouched. Group chats are never touched.
+- History that shrinks a lot (context compression, a reset) is never read as an undo.
 - An answer that comes back unchanged after a correction makes no pair.
 - Cron and subagent turns are ignored.
 - Sharing twice never uploads a pair twice.
@@ -154,7 +155,8 @@ A prompt or a skill only runs when you ask for it, and nobody asks in the moment
 - Detection is rules-based. Precision is 0.72 on held-out real data, and recall isn't measured, so some corrections are missed.
 - On Telegram the card lands just above Hermes's reply, because the hook runs before the reply is sent.
 - Hermes refuses `llm.side_question` when the agent runs on an external-process provider (for example a CLI subscription bridge). Ichor falls back to local labels.
-- Short replies switch off when two direct chats on the same platform have open cards at once. `/ichor keep <id>` still works.
+- Hermes doesn't tell a plugin which chat a turn came from, so short replies switch off while two cards are open on the same platform, for example in a bot several people use. `/ichor keep <id>` always works.
+- A discarded pair keeps no text. Kept and shared pairs stay in the local database until you run `/ichor forget-all yes`.
 - Scrubbing is pattern-based and can't catch every secret or personal detail. Read the card before you share.
 - The Atropos reward is string similarity, which is a weak signal. Treat the environment as a starting point.
 

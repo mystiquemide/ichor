@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from collections import Counter
+from collections import Counter, OrderedDict
 from typing import Any, Optional
 
 from . import card, commands, export_atropos, export_dpo, judge, share_hf
@@ -23,7 +23,8 @@ _state = TurnState()
 _store: Optional[Store] = None
 _store_lock = threading.Lock()
 _ctx: Any = None
-_cards: dict[int, Any] = {}  # pair id -> message handle, for in-place edits
+_cards: "OrderedDict[int, Any]" = OrderedDict()  # pair id -> message handle, for in-place edits
+_cards_lock = threading.Lock()
 _CARDS_MAX = 64
 _windows = ReplyWindows()
 
@@ -87,22 +88,25 @@ def _post_card(pair_id: int) -> bool:
     if not getattr(handle, "ok", False):
         logger.debug("ichor card not posted: %s", getattr(handle, "result", None))
         return False
-    _cards[pair_id] = handle
-    while len(_cards) > _CARDS_MAX:
-        _cards.pop(next(iter(_cards)))
+    with _cards_lock:
+        _cards[pair_id] = handle
+        while len(_cards) > _CARDS_MAX:
+            _cards.popitem(last=False)
     return True
 
 
 async def _on_post_gateway_admission(**kwargs: Any) -> Optional[dict]:
     """Claim a one-character card reply. Anything else returns None and reaches the agent."""
     try:
-        hit = _windows.match(text=kwargs.get("text"), platform=kwargs.get("platform"), source=kwargs.get("source"))
+        hit = _windows.match(text=kwargs.get("text"), platform=kwargs.get("platform"), source=kwargs.get("source"),
+                             session_key=kwargs.get("session_key") or "")
         if hit is None:
             return None
         pair_id, status = hit
         if not _get_store().set_status(pair_id, status):
             return None
-        handle = _cards.pop(pair_id, None)
+        with _cards_lock:
+            handle = _cards.pop(pair_id, None)
         text = card.collapsed(pair_id, status)
         if handle is not None and hasattr(handle, "aedit"):
             await handle.aedit(text)
@@ -140,6 +144,8 @@ def _export(_rest: list) -> str:
         return "ichor · nothing to export yet\nkeep or share a pair first"
     out_dir = export_dpo.default_dir()
     path, n = export_dpo.write(pairs, out_dir)
+    if n == 0:
+        return "ichor · nothing to export yet\nkept pairs were empty after cleanup"
     env_dir, _ = export_atropos.write(pairs, out_dir)
     home = os.path.expanduser("~")
     return (f"ichor · exported {n} pair{'s' if n != 1 else ''}\n"

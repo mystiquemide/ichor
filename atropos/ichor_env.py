@@ -78,6 +78,8 @@ class IchorEnv(BaseEnv):
 
     async def setup(self) -> None:
         self.pairs = load_pairs()
+        if not self.pairs:
+            raise RuntimeError("pairs.jsonl has no pairs: keep some pairs, then run /ichor export again")
         random.Random(0).shuffle(self.pairs)
 
     async def get_next_item(self) -> dict:
@@ -87,8 +89,10 @@ class IchorEnv(BaseEnv):
 
     async def collect_trajectories(self, item: dict) -> Tuple[Optional[ScoredDataGroup], list]:
         messages = [{"role": "user", "content": item["prompt"]}]
+        prompt_len = len(tokenize(self.tokenizer, messages + [{"role": "assistant", "content": ""}])["tokens"])
+        budget = max(32, self.config.max_token_length - prompt_len)  # prompt + completion stays inside the limit
         completions = await self.server.chat_completion(
-            messages=messages, n=self.config.group_size, max_tokens=self.config.max_token_length, temperature=1.0)
+            messages=messages, n=self.config.group_size, max_tokens=budget, temperature=1.0)
         rollouts = [messages + [{"role": "assistant", "content": c.message.content or ""}] for c in completions.choices]
         return self.score_rollouts(rollouts, item), []
 

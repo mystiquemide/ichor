@@ -9,8 +9,9 @@ from ichor.share_hf import ShareError, share
 
 
 class FakeHub:
-    def __init__(self, create_status=200, commit_status=200, whoami_status=200):
+    def __init__(self, create_status=200, commit_status=200, whoami_status=200, has_readme=True):
         self.calls = []
+        self.has_readme = has_readme
         self.create_status, self.commit_status, self.whoami_status = create_status, commit_status, whoami_status
 
     def __call__(self, req):
@@ -20,6 +21,9 @@ class FakeHub:
             return self._resp(self.whoami_status, {"name": "mide"})
         if path == "/api/repos/create":
             return self._resp(self.create_status, {"url": "x"})
+        if path == "/api/datasets/mide/ichor-pairs":
+            files = [{"rfilename": "README.md"}] if self.has_readme else [{"rfilename": ".gitattributes"}]
+            return self._resp(200, {"siblings": files})
         if path.endswith("/commit/main"):
             return self._resp(self.commit_status, {"commitOid": "abc"})
         raise AssertionError(path)
@@ -54,7 +58,7 @@ def test_first_share_creates_repo_and_card():
 def test_existing_repo_skips_card():
     hub = FakeHub(create_status=409)
     share(_pairs(), token="t", opener=hub)
-    ops = [json.loads(line) for line in hub.calls[2].data.decode().splitlines()]
+    ops = [json.loads(line) for line in hub.calls[-1].data.decode().splitlines()]
     assert all(op["value"].get("path") != "README.md" for op in ops if op["key"] == "file")
 
 
@@ -71,3 +75,20 @@ def test_errors_are_user_messages(monkeypatch):
         share(_pairs(), token="t", opener=FakeHub(create_status=403))
     with pytest.raises(ShareError, match="can't write"):
         share(_pairs(), token="t", opener=FakeHub(commit_status=403))
+
+
+def test_existing_repo_without_card_gets_one():
+    hub = FakeHub(create_status=409, has_readme=False)
+    share(_pairs(), token="t", opener=hub)
+    ops = [json.loads(line) for line in hub.calls[-1].data.decode().splitlines()]
+    assert any(op["value"].get("path") == "README.md" for op in ops if op["key"] == "file")
+
+
+def test_odd_whoami_payload_is_a_share_error():
+    class ListHub(FakeHub):
+        def __call__(self, req):
+            if req.full_url.endswith("/api/whoami-v2"):
+                return self._resp(200, ["not", "a", "dict"])
+            return super().__call__(req)
+    with pytest.raises(ShareError, match="rejected the token"):
+        share(_pairs(), token="t", opener=ListHub())

@@ -62,6 +62,13 @@ def _ends_with_question(text: str) -> bool:
     return tail.endswith("?")
 
 
+def _is_undo_shape(prev_len: int, cur_len: int) -> bool:
+    """/undo N then a new prompt leaves history equal or 2 per extra undone turn shorter.
+    A larger drop is compression or a reset, not a correction."""
+    drop = prev_len - cur_len
+    return 0 <= drop <= 6 and drop % 2 == 0
+
+
 def detect(prev: Optional[Turn], cur: Turn, min_confidence: str = "medium") -> Optional[Signal]:
     """Return a Signal when cur shows prev's answer was rejected, else None."""
     if prev is None or not (prev.assistant or "").strip() or not (cur.assistant or "").strip():
@@ -73,10 +80,10 @@ def detect(prev: Optional[Turn], cur: Turn, min_confidence: str = "medium") -> O
     same_text = _norm(prev.user) == _norm(cur.user) and bool(_norm(cur.user))
 
     signal: Optional[Signal] = None
-    if same_text and not grew:
+    if same_text and not grew and prev.history_len - cur.history_len <= 6:
         signal = Signal("retry", "high", "same message re-sent, history did not grow",
                         prev.user, prev.assistant, cur.assistant)
-    elif not grew and not same_text:
+    elif not grew and not same_text and _is_undo_shape(prev.history_len, cur.history_len):
         signal = Signal("undo", "medium", "history did not grow, new prompt",
                         cur.user, prev.assistant, cur.assistant)
     elif grew:

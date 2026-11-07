@@ -76,7 +76,7 @@ def share(pairs: list[dict[str, Any]], *, token: Optional[str] = None, repo_name
         raise ShareError("nothing queued to share\nreply s on a card, or /ichor share <id>")
 
     status, who = _call("GET", "/api/whoami-v2", token, opener=opener)
-    if status != 200 or not who.get("name"):
+    if status != 200 or not isinstance(who, dict) or not who.get("name"):
         raise ShareError("Hugging Face rejected the token\ncheck HF_TOKEN in ~/.hermes/.env")
     repo_id = f"{who['name']}/{repo_name}"
 
@@ -86,14 +86,18 @@ def share(pairs: list[dict[str, Any]], *, token: Optional[str] = None, repo_name
         raise ShareError("token can't create repos\ngive it write access to your own repos")
     if status not in (200, 201, 409):
         raise ShareError(f"could not create {repo_id} (HTTP {status})")
-    created = status in (200, 201)
+    needs_card = status in (200, 201)
+    if not needs_card:  # repo already existed: add the card only if it has none
+        st, meta = _call("GET", f"/api/datasets/{repo_id}", token, opener=opener)
+        siblings = meta.get("siblings", []) if st == 200 and isinstance(meta, dict) else []
+        needs_card = st == 200 and not any(s.get("rfilename") == "README.md" for s in siblings if isinstance(s, dict))
 
     rows = "".join(json.dumps(to_record(p), ensure_ascii=False) + "\n" for p in pairs)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     ops = [{"key": "header", "value": {"summary": f"ichor: add {len(pairs)} pairs", "description": ""}}]
     ops.append({"key": "file", "value": {"path": f"data/{stamp}-{len(pairs)}.jsonl", "encoding": "base64",
                                          "content": base64.b64encode(rows.encode()).decode()}})
-    if created:
+    if needs_card:
         ops.append({"key": "file", "value": {"path": "README.md", "encoding": "base64",
                                              "content": base64.b64encode(CARD.format(repo=repo_id).encode()).decode()}})
     body = "\n".join(json.dumps(op) for op in ops).encode()

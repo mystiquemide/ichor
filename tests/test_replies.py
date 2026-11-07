@@ -49,3 +49,26 @@ def test_other_platform_not_claimed():
     w = ReplyWindows()
     w.open(3, "discord", now=0)
     assert w.match(text="k", platform="telegram", source=DM, now=1) is None
+
+
+def test_session_key_keeps_chats_apart():
+    w = ReplyWindows()
+    w.open(3, "telegram", now=0, session_key="agent:main:telegram:dm:A")
+    # user B in their own DM: the only open card belongs to A, so B's "k" is not claimed
+    assert w.match(text="k", platform="telegram", source=DM, now=1, session_key="agent:main:telegram:dm:B") is None
+    assert w.match(text="k", platform="telegram", source=DM, now=2, session_key="agent:main:telegram:dm:A") == (3, "kept")
+
+
+def test_same_chat_reply_answers_newest_card():
+    w = ReplyWindows()
+    w.open(3, "telegram", now=0, session_key="A")
+    w.open(4, "telegram", now=5, session_key="A")
+    w.open(9, "telegram", now=6, session_key="B")
+    assert w.match(text="d", platform="telegram", source=DM, now=7, session_key="A") == (4, "discarded")
+
+
+def test_clear():
+    w = ReplyWindows()
+    w.open(3, "telegram", now=0)
+    w.clear()
+    assert w.match(text="k", platform="telegram", source=DM, now=1) is None

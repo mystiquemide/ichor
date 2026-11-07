@@ -79,3 +79,12 @@ def test_backfill_categories(store):
     assert store.backfill_categories(lambda p: "wrong package manager") == 1
     assert store.get(a)["category"] == "wrong package manager"
     assert store.get(b)["category"] == "kept label"
+
+
+def test_discard_clears_text_and_sticks(store):
+    pid = store.add(_pair())
+    assert store.set_status(pid, "discarded")
+    got = store.get(pid)
+    assert (got["prompt"], got["rejected"], got["accepted"], got["feedback"]) == ("", "", "", "")
+    assert not store.set_status(pid, "kept")  # a dropped pair can't come back with empty text
+    assert store.get(pid)["status"] == "discarded"

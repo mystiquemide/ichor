@@ -22,7 +22,7 @@ _RULES: list[tuple[str, re.Pattern[str], str]] = [
     ("bearer", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-~+/]{16,}=*"), "Bearer [REDACTED:bearer]"),
     ("url_credentials", re.compile(r"(?i)\b([a-z][a-z0-9+.\-]{0,15}://)[^\s:/@]{1,256}:[^\s/@]{1,256}@"), r"\1[REDACTED:credentials]@"),
     ("secret_assignment", re.compile(
-        r"(?i)\b([A-Z0-9_]*(?:API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PWD)[A-Z0-9_]*)(\s*[=:]\s*)(['\"]?)([^\s'\"]{6,})\3"),
+        r"(?i)\b([A-Z0-9_]{0,64}(?:API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PWD)[A-Z0-9_]{0,64})(\s{0,8}[=:]\s{0,8})(['\"]?)([^\s'\"]{6,512})\3"),
         r"\1\2\3[REDACTED:secret]\3"),
     # Bounded lengths (RFC 5321 limits) keep this linear on long text with no "@".
     ("email", re.compile(r"(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9\-]{1,63}(?:\.[A-Za-z0-9\-]{1,63}){0,8}\.[A-Za-z]{2,24}\b"), "[REDACTED:email]"),
@@ -38,12 +38,15 @@ SECRET_KINDS = {
 }
 
 
+MAX_CHARS = 20000
+
+
 def scrub(text: str | None) -> tuple[str, Counter]:
-    """Return (scrubbed_text, counts by kind). Never raises on str input."""
+    """Return (scrubbed_text, counts by kind). Input past MAX_CHARS is cut first. Never raises on str input."""
     counts: Counter = Counter()
     if not text:
         return text or "", counts
-    out = text
+    out = text if len(text) <= MAX_CHARS else text[:MAX_CHARS] + f"\n... [cut {len(text) - MAX_CHARS} chars]"
     for kind, pattern, repl in _RULES:
         out, n = pattern.subn(repl, out)
         if n:

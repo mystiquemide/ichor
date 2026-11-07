@@ -65,8 +65,13 @@ class Store:
         if status not in STATUSES:
             return False
         with self._lock, self._conn:
-            cur = self._conn.execute("UPDATE pairs SET status = ?, updated_at = ? WHERE id = ?",
-                                     (status, time.time(), pair_id))
+            if status == "discarded":  # a dropped pair keeps no text
+                cur = self._conn.execute(
+                    "UPDATE pairs SET status = ?, updated_at = ?, prompt = '', rejected = '', accepted = '', "
+                    "feedback = '' WHERE id = ?", (status, time.time(), pair_id))
+            else:
+                cur = self._conn.execute("UPDATE pairs SET status = ?, updated_at = ? WHERE id = ? "
+                                         "AND status != 'discarded'", (status, time.time(), pair_id))
             return cur.rowcount == 1
 
     def set_category(self, pair_id: int, category: str) -> None:
@@ -74,7 +79,7 @@ class Store:
             self._conn.execute("UPDATE pairs SET category = ? WHERE id = ?", (category, pair_id))
 
     def backfill_categories(self, labeler) -> int:
-        rows = self._conn.execute("SELECT * FROM pairs WHERE category IS NULL").fetchall()
+        rows = self._all("SELECT * FROM pairs WHERE category IS NULL")
         n = 0
         for row in rows:
             cat = labeler(dict(row))
@@ -93,48 +98,54 @@ class Store:
         with self._lock, self._conn:
             return self._conn.execute("DELETE FROM pairs").rowcount
 
-    # reads
+    # reads (the connection is shared across threads, so reads take the lock too)
+
+    def _all(self, sql: str, args: tuple = ()) -> list:
+        with self._lock:
+            return self._conn.execute(sql, args).fetchall()
+
+    def _one(self, sql: str, args: tuple = ()):
+        with self._lock:
+            return self._conn.execute(sql, args).fetchone()
 
     def get(self, pair_id: int) -> Optional[dict[str, Any]]:
-        row = self._conn.execute("SELECT * FROM pairs WHERE id = ?", (pair_id,)).fetchone()
-        return _row(row)
+        return _row(self._one("SELECT * FROM pairs WHERE id = ?", (pair_id,)))
 
     def latest_pending(self, session_id: Optional[str] = None) -> Optional[dict[str, Any]]:
         if session_id:
-            row = self._conn.execute(
-                "SELECT * FROM pairs WHERE status='pending' AND session_id=? ORDER BY id DESC LIMIT 1",
-                (session_id,)).fetchone()
+            row = self._one("SELECT * FROM pairs WHERE status='pending' AND session_id=? ORDER BY id DESC LIMIT 1",
+                            (session_id,))
         else:
-            row = self._conn.execute("SELECT * FROM pairs WHERE status='pending' ORDER BY id DESC LIMIT 1").fetchone()
+            row = self._one("SELECT * FROM pairs WHERE status='pending' ORDER BY id DESC LIMIT 1")
         return _row(row)
 
     def oldest_pending(self) -> Optional[dict[str, Any]]:
-        return _row(self._conn.execute("SELECT * FROM pairs WHERE status='pending' ORDER BY id ASC LIMIT 1").fetchone())
+        return _row(self._one("SELECT * FROM pairs WHERE status='pending' ORDER BY id ASC LIMIT 1"))
 
     def counts(self) -> dict[str, int]:
         out = {s: 0 for s in STATUSES}
-        for row in self._conn.execute("SELECT status, COUNT(*) AS n FROM pairs GROUP BY status"):
+        for row in self._all("SELECT status, COUNT(*) AS n FROM pairs GROUP BY status"):
             out[row["status"]] = row["n"]
         return out
 
     def top_categories(self, limit: int = 3) -> list[tuple[str, int]]:
-        rows = self._conn.execute(
+        rows = self._all(
             "SELECT COALESCE(category, kind) AS c, COUNT(*) AS n FROM pairs "
             "WHERE status IN ('kept','shared','pending') GROUP BY c ORDER BY n DESC, c ASC LIMIT ?", (limit,))
         return [(r["c"], r["n"]) for r in rows]
 
     def exportable(self) -> list[dict[str, Any]]:
-        rows = self._conn.execute("SELECT * FROM pairs WHERE status IN ('kept','shared') ORDER BY id")
+        rows = self._all("SELECT * FROM pairs WHERE status IN ('kept','shared') ORDER BY id")
         return [d for r in rows if (d := _row(r)) is not None]
 
     def to_upload(self) -> list[dict[str, Any]]:
-        rows = self._conn.execute("SELECT * FROM pairs WHERE status='shared' AND uploaded_at IS NULL ORDER BY id")
+        rows = self._all("SELECT * FROM pairs WHERE status='shared' AND uploaded_at IS NULL ORDER BY id")
         return [d for r in rows if (d := _row(r)) is not None]
 
     # settings
 
     def setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
-        row = self._conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        row = self._one("SELECT value FROM settings WHERE key = ?", (key,))
         return row["value"] if row else default
 
     def set_setting(self, key: str, value: str) -> None:

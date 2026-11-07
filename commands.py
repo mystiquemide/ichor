@@ -85,6 +85,7 @@ def run(raw_args: str, *, store: Any, state: Any, windows: Any, session_id: str 
         if rest[:1] != ["yes"]:
             n = sum(store.counts().values())
             return f"ichor · this deletes all {n} pairs\nconfirm with /ichor forget-all yes"
+        windows.clear()
         return f"ichor · deleted {store.forget_all()} pairs"
     if extra and sub in extra:
         return extra[sub](rest)

@@ -59,3 +59,14 @@ def test_pair_sides():
     sig = detect(Turn("build it", "npm run build", 2), Turn("no, use pnpm", "pnpm build", 4))
     assert sig is not None
     assert (sig.prompt, sig.rejected, sig.accepted, sig.feedback) == ("build it", "npm run build", "pnpm build", "no, use pnpm")
+
+
+def test_compression_shrink_is_not_an_undo():
+    prev = Turn("summarize the repo", "It has 12 modules.", 80)
+    assert detect(prev, Turn("now list the tests", "There are 9 test files.", 6)) is None
+    assert detect(prev, Turn("summarize the repo", "Different words.", 12)) is None  # big drop, same text
+
+
+def test_multi_turn_undo_is_still_an_undo():
+    sig = detect(Turn("deploy to prod", "Deploying.", 20), Turn("deploy to staging", "Staging.", 16))
+    assert sig is not None and sig.kind == "undo"

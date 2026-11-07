@@ -27,6 +27,10 @@ def _inputs():
         "underscores": "_" * 50000,
         "key-ish run": "API_" * 12000,
         "plus digits": "+1 " * 15000,
+        "token run": "TOKEN" * 10000,
+        "dashes": "a-" * 25000,
+        "password run": "PASSWORD=" * 6000,
+        "huge": "a." * 200000,
     }
 
 
@@ -57,3 +61,8 @@ def test_detect_is_fast_on_long_messages():
         if took > LIMIT_S:
             slow[name] = round(took, 2)
     assert not slow, slow
+
+
+def test_long_input_is_cut():
+    out, _ = scrub("x" * 30000)
+    assert len(out) < 20100 and out.endswith("chars]")
