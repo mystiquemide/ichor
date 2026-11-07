@@ -7,3 +7,18 @@ __pycache__/
 .pytest_cache/
 exports/
 WIN-PLAN.md
+
+# local data and tooling
+*.db
+*.db-shm
+*.db-wal
+*.jsonl.imported
+.venv/
+venv/
+.env.*
+!.env.example
+
+# internal planning, kept local
+docs/PRD.md
+docs/DESIGN.md
+docs/TASKS.md

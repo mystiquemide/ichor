@@ -1,165 +1,83 @@
 # Ichor architecture
 
-## Overview
-
-Ichor is a native Hermes plugin (`plugin.yaml` plus `__init__.py` exposing `register(ctx)`). It observes turns, forms preference pairs when the user corrects the agent, scrubs them, stores them locally, and exports or shares them on request. It never changes, blocks, or delays agent behavior.
+Ichor is a native Hermes plugin: `plugin.yaml` plus `__init__.py` exposing `register(ctx)`. It observes finished turns, forms a preference pair when the user rejects an answer, scrubs it, stores it locally, and exports or shares pairs on request. It never changes, blocks or delays what Hermes does.
 
 ```
-  user turn N        post_llm_call(N)          user turn N+1           post_llm_call(N+1)
-  ----------> agent ---------------> Ichor ----------> agent ----------------> Ichor
-                                     |  remember last turn                      |
-                                     |                                          v
-                                     |                          detector: correction? retry? undo?
-                                     |                                          |
-                                     |                          pair = (prompt, rejected=N, accepted=N+1)
-                                     |                                          |
-                                     |                          scrubber -> store(pending) -> card
-                                     v                                          |
-                               /ichor commands  <---------------- keep / share / discard
-                                     |
-                      export: dpo.jsonl, atropos env    share: HF dataset (HTTP API)
+turn N  ── post_llm_call ──▶ TurnState remembers (user, answer, history length)
+turn N+1 ─ post_llm_call ──▶ detect(N, N+1) ── no ──▶ done
+                                  │ yes
+                                  ▼
+                 scrub ▶ categorize ▶ store (pending) ▶ post card ▶ open 120 s reply window
+                                                            │            (background) side_question label
+user replies k / s / d ── post_gateway_admission ──▶ set status ▶ edit card in place
+/ichor export ──▶ dpo.jsonl + atropos_env/        /ichor share ──▶ Hugging Face dataset
 ```
 
-## Hermes surfaces used
+## Hermes surfaces
 
 | Surface | Use |
-|---------|-----|
-| `ctx.register_hook("post_llm_call", fn)` | Observe each finished turn. Kwargs: session_id, turn_id, user_message, assistant_response, conversation_history, model, platform, side_question_token. |
-| `ctx.register_hook("on_session_end", fn)` | Drop in-memory turn state for the session. |
-| `ctx.register_command("ichor", fn)` | One slash command with subcommands. |
-| `ctx.register_hook("post_gateway_admission", fn)` | Claim one-character card replies (k / s / d) inside an open card window. |
-| `ctx.post_message(text)` / `handle.edit(text)` | Capture card, edited in place after a choice. |
-| `ctx.side_question(token, prompt)` | Optional category label. Capability `llm.side_question`, fail closed. |
-| `plugins.plugin_storage.plugin_data_dir` / `plugin_db` | Durable profile-scoped data dir and SQLite. Documented helpers. |
+|---|---|
+| `post_llm_call` hook | Every finished turn: `session_id`, `user_message`, `assistant_response`, `conversation_history`, `platform`, `model`, `side_question_token` |
+| `on_session_finalize` hook | Drops per-session state. `on_session_end` is not used because it fires after every turn |
+| `post_gateway_admission` hook (async) | Claims a one-letter card reply by returning `{"action": "handled"}`; anything else passes through |
+| `ctx.post_message` / `handle.aedit` | Posts the card and edits it in place |
+| `ctx.side_question` | Optional mistake label, capability `llm.side_question`, fails closed |
+| `ctx.register_command("ichor", ...)` | One slash command with subcommands; receives `session_id` and `platform` |
+| `plugins.plugin_storage.plugin_db` | Profile-scoped SQLite at `~/.hermes/plugin-data/ichor/ichor.db` |
 
-No core module imports beyond documented plugin helpers. No tool overrides.
+No core module is patched or imported beyond the documented plugin helpers.
 
 ## Modules
 
-```
-ichor/
-  plugin.yaml
-  __init__.py        register(ctx): wires hooks and the command
-  state.py           per-session last-turn memory (bounded dict, thread-safe)
-  detect.py          correction signals -> Signal(kind, confidence, reason)
-  scrub.py           regex scrubber -> (text, counts)
-  store.py           SQLite schema and queries
-  card.py            card text rendering (pure functions)
-  commands.py        /ichor subcommand router
-  export_dpo.py      TRL DPO JSONL writer
-  export_atropos.py  Atropos environment folder writer
-  share_hf.py        HF Hub HTTP upload (stdlib urllib only)
-  judge.py           optional side_question category labeler
-tests/
-  fixtures/turns.jsonl      labeled correction / non-correction turns
-  fixtures/secrets.txt      token formats for scrubber recall
-  test_detect.py test_scrub.py test_store.py test_export.py test_commands.py
-```
+| File | Role |
+|---|---|
+| `__init__.py` | `register(ctx)`, hook handlers, export and share glue |
+| `state.py` | Last turn per session (bounded to 256 sessions), per-session off switch, skips cron and subagent turns |
+| `detect.py` | `detect(prev, cur)` returns a `Signal` (retry, undo or correction) or `None` |
+| `scrub.py` | Pattern scrubber with bounded regexes, returns text plus counts by type |
+| `categorize.py` | Local mistake label from the user's words; the side_question label overrides it |
+| `judge.py` | Builds the side_question prompt, cleans the answer, runs on a daemon thread |
+| `store.py` | SQLite schema, status lifecycle, settings |
+| `card.py` | Plain-text card, collapsed line and status views |
+| `replies.py` | Reply windows and the claim rule for k / s / d |
+| `commands.py` | `/ichor` subcommand router |
+| `export_dpo.py` | TRL conversational preference JSONL |
+| `export_atropos.py`, `atropos/` | Atropos environment folder and reward |
+| `share_hf.py` | Hugging Face Hub upload over stdlib `urllib` |
 
 ## Detection
 
-Input on turn N+1: previous turn (u_N, a_N, history_len_N) and current turn (u_N1, a_N1, history_len_N1).
+On turn N+1, compared with turn N:
 
-| Kind | Rule | Confidence |
-|------|------|-----------|
-| retry | normalized u_N1 == normalized u_N and history_len_N1 <= history_len_N | high |
-| undo | history_len_N1 <= history_len_N (history did not grow) and u_N1 differs | medium; prompt = u_N1, rejected = a_N |
-| correction | u_N1 starts with or contains a correction pattern ("no,", "nope", "wrong", "that's not", "instead", "actually", "use X not Y", "don't", "stop", "you forgot") and a_N exists | medium; boosted if short (< 200 chars) |
-| none | anything else | n/a |
+| Kind | Rule | Pair |
+|---|---|---|
+| retry | Same user text and history did not grow | prompt = u_N, rejected = a_N, accepted = a_N+1 |
+| undo | History did not grow and the user text changed | prompt = u_N+1, rejected = a_N, accepted = a_N+1 |
+| correction | History grew and the new message opens with a rejection ("no", "wrong", "I said", "that's not", "actually"...) or contains a redirect ("use X instead of Y", "still too long", "didn't work"...) | prompt = u_N, rejected = a_N, accepted = a_N+1, feedback = u_N+1 |
 
-Verified live on Telegram (Hermes v0.23.0, 2026-11-07): a normal turn grows history by 2 or more (more with tool calls). /retry re-sends the same user text and history_len stays equal (8 -> 8). /undo then a new prompt also leaves history_len equal (10 -> 10) with different user text. /retry, /undo and plugin slash commands do not fire post_llm_call themselves.
+Guards: an unchanged answer makes no pair; a bare "no" or "no thanks" to a question the agent asked is an answer, not a correction; agreement openers ("yes", "let's", "and", "also", "don't worry"), thanks, "no need", question-led requests ("how do I fix it") and "fix it" instructions are skipped; long messages with only a weak cue are low confidence and dropped at the default threshold.
 
-Guards: skip if normalized a_N1 == normalized a_N (a retry that produced the same answer is not a preference), skip if a_N is empty, if either side is a tool-only turn with no text, if platform is cron or subagent, or if Ichor is off for the session.
+Live history shapes on Hermes v0.23.0: a normal turn grows history by 2 or more; `/retry` re-sends the same text with history unchanged; `/undo` plus a new prompt leaves history unchanged with different text.
 
-Pair shape:
-- retry: prompt = u_N, rejected = a_N, accepted = a_N1
-- correction: prompt = u_N, rejected = a_N, accepted = a_N1, feedback = u_N1
-- undo: prompt = u_N1, rejected = a_N, accepted = a_N1
+## Reply claiming
 
-Every pair is pending until the user taps. Detection precision is measured against tests/fixtures/turns.jsonl.
-
-## Scrubbing
-
-Applied to prompt, rejected, accepted, feedback before storage. Patterns: OpenAI/Anthropic/HF/GitHub/AWS/Slack/Stripe key formats, generic `Bearer` and `key=` assignments, JWTs, private key blocks, emails, IPv4, phone numbers, home paths (`/home/<user>`, `/Users/<user>`, `C:\Users\<user>`). Replacements are typed placeholders such as `[REDACTED:hf_token]` and `~/`. Counts per type are stored and shown on the card.
+A message is claimed only if all of these hold: it is exactly `k`, `s`, `d`, `keep`, `share` or `discard` (case-insensitive); it arrives in a direct chat; it is within 120 s of a card; and exactly one card window is open on that platform. `post_gateway_admission` has no session id, so the one-open-window rule prevents a reply in one chat from changing a pair from another. When the rule can't decide, the message reaches the agent and `/ichor keep <id>` remains available.
 
 ## Storage
 
-SQLite at `plugin_db("ichor", "ichor.db")`.
-
 ```
-pairs(
-  id INTEGER PRIMARY KEY,
-  created_at TEXT, session_id TEXT, turn_id TEXT, platform TEXT, model TEXT,
-  kind TEXT,                 -- retry | correction | undo
-  confidence REAL,
-  prompt TEXT, rejected TEXT, accepted TEXT, feedback TEXT,
-  category TEXT,             -- judge label or rule label
-  scrub_counts TEXT,         -- JSON
-  status TEXT,               -- pending | kept | shared | discarded
-  shared_at TEXT, share_url TEXT
-)
-settings(key TEXT PRIMARY KEY, value TEXT)
+pairs(id, created_at, session_id, turn_id, platform, model, kind, confidence, reason,
+      prompt, rejected, accepted, feedback, category, scrub_counts JSON,
+      status pending|kept|shared|discarded, updated_at, uploaded_at, share_url)
+settings(key, value)        -- global_off, hf_repo, hf_private
 ```
 
-## Commands
+## Outputs
 
-| Command | Result |
-|---------|--------|
-| `/ichor` or `/ichor status` | counts by status, top categories |
-| `/ichor review` | next pending pair with choices (ask_choice where supported) |
-| `/ichor keep|share|discard <id>` | set status |
-| `/ichor export [dir]` | writes `dpo.jsonl` and `atropos_env/`, prints paths and counts |
-| `/ichor share` | uploads status=shared pairs not yet uploaded, prints dataset URL |
-| `/ichor off|on` | per session toggle; `/ichor off --global` persists |
-| `/ichor forget-all` | deletes all pairs after confirmation |
+- `dpo.jsonl`: `{"prompt": [user], "chosen": [assistant], "rejected": [assistant], "metadata": {...}}`, TRL's conversational preference format.
+- `atropos_env/`: `pairs.jsonl`, `ichor_env.py` (`IchorEnv(BaseEnv)`, own tokenizer helper that works on transformers 4 and 5) and `ichor_reward.py` (similarity to accepted minus similarity to rejected, scaled so the accepted answer scores 1 and the rejected one -1).
+- Hugging Face: `<user>/ichor-pairs` by default, created private; each share is one commit adding `data/<stamp>-<n>.jsonl`, plus a dataset card on the first share. Pairs are marked uploaded so they are never sent twice.
 
-## Card delivery
+## Failure behavior
 
-1. After a pair is stored, call `ctx.post_message(card_text)`.
-2. If the handle is ok, keep handle in memory keyed by pair id and open a 120 s reply window for that session.
-3. Short replies: a `post_gateway_admission` hook claims an inbound message only when all hold: the session has an open card window, the text is exactly `k`, `s`, or `d` (case-insensitive, trimmed), and a pair is pending. It returns `{"action": "handled"}` and edits the card in place. Anything else passes through to the agent untouched (fail-open).
-4. Fallback: `/ichor keep|share|discard <id>` always works, on every surface.
-5. If post_message is refused (no live gateway, plain CLI), the pair stays pending and `/ichor review` surfaces it.
-
-## Export formats
-
-DPO JSONL, one object per kept or shared pair:
-```
-{"prompt": [{"role":"user","content": "..."}], "chosen": [{"role":"assistant","content":"..."}], "rejected": [{"role":"assistant","content":"..."}], "metadata": {"kind":"...", "category":"...", "model":"...", "source":"ichor"}}
-```
-This is TRL's conversational preference format; verified by loading with `datasets` and running TRL's DPO dataset preprocessing in a test.
-
-Atropos env folder: `pairs.jsonl` plus `ichor_env.py` implementing a BaseEnv subclass that serves prompts and scores completions by similarity to the accepted answer and dissimilarity to the rejected one. Marked experimental.
-
-## Sharing
-
-- Target repo: `<hf_user>/ichor-pairs` (configurable), created private by default via `POST /api/repos/create` with `type: dataset`.
-- Upload via the Hub commit API (`POST /api/datasets/{repo}/commit/main`, NDJSON) with `data/<date>-<n>.jsonl` and a dataset card README on first upload.
-- Token: `HF_TOKEN` from environment. Missing token returns a setup message, never an error.
-- stdlib `urllib` only, no new dependency.
-
-## Error handling
-
-- Every hook body is wrapped; exceptions are logged at debug and swallowed.
-- Store writes are short transactions; WAL mode.
-- Network only in share; timeouts 30 s; failures reported in command output.
-
-## Configuration
-
-`config_schema` keys: `enabled` (bool, default true), `min_confidence` (low|medium|high, default medium), `use_judge` (bool, default true when capability granted), `hf_repo` (string, default `ichor-pairs`), `hf_private` (bool, default true).
-
-## Testing
-
-- Unit tests per module with pytest, run with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`.
-- Fixture-driven precision test for detection.
-- Export test loads output through `datasets` and TRL's DPO preprocessing (dev dependency only).
-- `hermes plugins validate . --install-deps` and `hermes plugins doctor .` must pass.
-- Live test on Telegram gateway before demo.
-
-## ADRs
-
-1. Observe only, via post_llm_call. Keeps Ichor fail-safe and out of the agent's critical path.
-2. Human tap on every pair. Precision over recall; protects dataset quality and privacy.
-3. Local regex scrubbing, not core redaction. Avoids undocumented core imports; predictable and testable.
-4. stdlib HTTP for HF. No dependency floor issues with Hermes core constraints.
-5. One slash command with subcommands. Smaller surface, easier to declare and validate.
+Every hook body is wrapped and fails open. Network is used only by `/ichor share`, with a 30 s timeout, and errors come back as a short message. Scrubber patterns are bounded so 50k-character hostile inputs scrub in well under a second (`tests/test_scrub_perf.py`).

@@ -33,27 +33,8 @@ def _get_store() -> Store:
     with _store_lock:
         if _store is None:
             _store = Store.open_default()
-            _import_legacy_jsonl(_store)
             _store.backfill_categories(rule_label)
         return _store
-
-
-def _import_legacy_jsonl(store: Store) -> None:
-    """One-time move of pairs captured before the SQLite store existed."""
-    try:
-        from plugins.plugin_storage import plugin_data_dir
-
-        path = plugin_data_dir(PLUGIN_NAME) / "signals.jsonl"
-        if not path.exists():
-            return
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.strip():
-                row = json.loads(line)
-                row["scrub_counts"] = row.pop("scrub", {})
-                store.add(row)
-        path.rename(path.with_suffix(".jsonl.imported"))
-    except Exception:
-        logger.debug("ichor legacy import failed", exc_info=True)
 
 
 def _record(signal, *, session_id, turn_id, platform, model) -> int:

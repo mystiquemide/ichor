@@ -64,6 +64,7 @@ Optional:
 | `/ichor keep <id>` / `share <id>` / `discard <id>` | Set a pair's status from any surface |
 | `/ichor export` | Write `dpo.jsonl` for TRL and an `atropos_env/` folder |
 | `/ichor share` | Upload queued pairs to Hugging Face |
+| `/ichor set repo <name>` / `set public` / `set private` | Choose the dataset name and visibility for new repos |
 | `/ichor off` / `on` | Pause or resume in this chat, add `--global` for everywhere |
 | `/ichor forget-all yes` | Delete every stored pair |
 
@@ -126,14 +127,14 @@ The held-out number is the one to trust. About one card in four is a false alarm
 
 ```bash
 hermes plugins validate . --install-deps   # every check passes, security scan safe, no core overrides
-python -m pytest tests -q                  # 64 passed
+python -m pytest tests -q                  # all tests pass, no network needed
 ```
 
 ## Privacy
 
 - Every side of a pair is scrubbed before it's stored: API keys and tokens (OpenAI, Anthropic, Hugging Face, GitHub, AWS, Slack, Stripe, Google, Telegram bot), JWTs, Bearer headers, passwords in URLs, `*_KEY=` / `*_SECRET=` / `*_TOKEN=` / `*_PASSWORD=` assignments, private keys, emails, IP addresses, phone numbers and home paths. The card shows what was removed.
 - Pairs live in `~/.hermes/plugin-data/ichor/ichor.db`, inside your profile.
-- The only network call is `/ichor share`, to `huggingface.co` with your token. Repos are private unless you change it.
+- The only network call is `/ichor share`, to `huggingface.co` with your token. New repos are private unless you run `/ichor set public`.
 
 ## Why it's a plugin
 

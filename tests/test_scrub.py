@@ -25,9 +25,9 @@ def _cases():
         ("secret_assignment", "export MY_API_KEY='" + A + "'"),
         ("private_key", "-----BEGIN RSA PRIVATE KEY-----\nMIIabc\n-----END RSA PRIVATE KEY-----"),
         ("email", "mail me at jane.doe@example.org"),
-        ("ipv4", "server at 159.69.241.122 is up"),
+        ("ipv4", "server at 203.0.113.7 is up"),
         ("phone", "call +44 20 7946 0958 today"),
-        ("home_path", "see /home/mide/projects/app"),
+        ("home_path", "see /home/alice/projects/app"),
         ("home_path", "open /Users/jane/Desktop"),
         ("home_path", r"C:\Users\jane\file.txt"),
     ]
@@ -47,7 +47,7 @@ def test_every_secret_format_is_removed():
 def test_secret_values_never_survive():
     for _kind, text in _cases():
         out, _ = scrub(text)
-        for token in (A * 3, "hunter2pass", "s3cr3tValue!", "jane.doe@example.org", "159.69.241.122", "/home/mide"):
+        for token in (A * 3, "hunter2pass", "s3cr3tValue!", "jane.doe@example.org", "203.0.113.7", "/home/alice"):
             if token in text:
                 assert token not in out, (text, out)
 
@@ -66,7 +66,7 @@ def test_localhost_is_not_an_ip_leak():
 
 
 def test_summary_line():
-    _, counts = scrub("/home/mide/a and sk-" + A * 3)
+    _, counts = scrub("/home/alice/a and sk-" + A * 3)
     assert summarize(counts) == "1 path · 1 secret"
 
 

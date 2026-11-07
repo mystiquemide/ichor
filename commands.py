@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Callable, Optional
 
 from . import card
@@ -15,10 +16,29 @@ HELP = (
     "  /ichor share           upload queued pairs to HF\n"
     "  /ichor discard <id>    drop it\n"
     "  /ichor export          write TRL + Atropos files\n"
+    "  /ichor set repo <name> Hugging Face dataset name\n"
+    "  /ichor set public      share to a public repo\n"
+    "  /ichor set private     share to a private repo\n"
     "  /ichor off | on        pause or resume here\n"
     "  /ichor off --global    pause everywhere\n"
     "  /ichor forget-all yes  delete every pair"
 )
+
+_REPO_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$")
+
+
+def _set(rest: list[str], store: Any) -> str:
+    if rest[:1] == ["repo"] and len(rest) == 2:
+        if not _REPO_NAME.match(rest[1]) or ".." in rest[1]:
+            return "ichor · repo name can use letters, digits, '.', '_' and '-'"
+        store.set_setting("hf_repo", rest[1])
+        return f"ichor · sharing to {rest[1]}"
+    if rest in (["public"], ["private"]):
+        store.set_setting("hf_private", "0" if rest[0] == "public" else "1")
+        note = "\nnew repos are created public; an existing repo keeps its visibility" if rest[0] == "public" else ""
+        return f"ichor · sharing to a {rest[0]} repo{note}"
+    return "usage: /ichor set repo <name> | public | private"
+
 
 _STATUS_WORDS = {"keep": "kept", "k": "kept", "share": "shared", "s": "shared", "discard": "discarded", "d": "discarded"}
 
@@ -59,6 +79,8 @@ def run(raw_args: str, *, store: Any, state: Any, windows: Any, session_id: str 
             return "ichor · no session here yet, send a message first"
         state.set_off(session_id, off)
         return card.off() if off else card.on()
+    if sub == "set":
+        return _set(rest, store)
     if sub == "forget-all":
         if rest[:1] != ["yes"]:
             n = sum(store.counts().values())

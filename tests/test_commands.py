@@ -75,3 +75,15 @@ def test_extra_subcommands(env):
 def test_bare_share_uploads(env):
     assert run("share", extra={"upload": lambda rest: "uploaded"}, **env) == "uploaded"
     assert run("share", **env) == "usage: /ichor share <id>"
+
+
+def test_set_repo_and_visibility(env):
+    assert run("set repo my-pairs", **env) == "ichor · sharing to my-pairs"
+    assert env["store"].setting("hf_repo") == "my-pairs"
+    assert "can use letters" in run("set repo ../evil", **env)
+    assert "can use letters" in run("set repo a/b", **env)
+    assert run("set public", **env).startswith("ichor · sharing to a public repo")
+    assert env["store"].setting("hf_private") == "0"
+    assert run("set private", **env) == "ichor · sharing to a private repo"
+    assert env["store"].setting("hf_private") == "1"
+    assert run("set", **env).startswith("usage:")
