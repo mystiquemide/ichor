@@ -9,6 +9,7 @@ from collections import Counter
 from typing import Any, Optional
 
 from . import card, commands, export_dpo, judge, share_hf
+from .categorize import rule_label
 from .replies import ReplyWindows
 from .scrub import scrub
 from .state import TurnState
@@ -33,6 +34,7 @@ def _get_store() -> Store:
         if _store is None:
             _store = Store.open_default()
             _import_legacy_jsonl(_store)
+            _store.backfill_categories(rule_label)
         return _store
 
 
@@ -64,7 +66,7 @@ def _record(signal, *, session_id, turn_id, platform, model) -> int:
     return _get_store().add({
         "session_id": session_id, "turn_id": turn_id, "platform": platform, "model": model,
         "kind": signal.kind, "confidence": signal.confidence, "reason": signal.reason,
-        "scrub_counts": dict(total), **fields,
+        "scrub_counts": dict(total), "category": rule_label({"kind": signal.kind, **fields}), **fields,
     })
 
 

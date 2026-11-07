@@ -73,6 +73,16 @@ class Store:
         with self._lock, self._conn:
             self._conn.execute("UPDATE pairs SET category = ? WHERE id = ?", (category, pair_id))
 
+    def backfill_categories(self, labeler) -> int:
+        rows = self._conn.execute("SELECT * FROM pairs WHERE category IS NULL").fetchall()
+        n = 0
+        for row in rows:
+            cat = labeler(dict(row))
+            if cat:
+                self.set_category(row["id"], cat)
+                n += 1
+        return n
+
     def mark_uploaded(self, ids: Iterable[int], url: str) -> None:
         now = time.time()
         with self._lock, self._conn:

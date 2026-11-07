@@ -71,3 +71,11 @@ def test_forget_all_and_settings(store):
     store.set_setting("off", "1")
     store.set_setting("off", "0")
     assert store.setting("off") == "0"
+
+
+def test_backfill_categories(store):
+    a = store.add(_pair())
+    b = store.add(_pair(category="kept label"))
+    assert store.backfill_categories(lambda p: "wrong package manager") == 1
+    assert store.get(a)["category"] == "wrong package manager"
+    assert store.get(b)["category"] == "kept label"
