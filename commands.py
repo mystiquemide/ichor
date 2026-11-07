@@ -14,7 +14,7 @@ HELP = (
     "  /ichor share <id>      queue for sharing\n"
     "  /ichor share           upload queued pairs to HF\n"
     "  /ichor discard <id>    drop it\n"
-    "  /ichor export          write dpo.jsonl for TRL\n"
+    "  /ichor export          write TRL + Atropos files\n"
     "  /ichor off | on        pause or resume here\n"
     "  /ichor off --global    pause everywhere\n"
     "  /ichor forget-all yes  delete every pair"

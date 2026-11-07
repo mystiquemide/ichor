@@ -8,7 +8,7 @@ import threading
 from collections import Counter
 from typing import Any, Optional
 
-from . import card, commands, export_dpo, judge, share_hf
+from . import card, commands, export_atropos, export_dpo, judge, share_hf
 from .categorize import rule_label
 from .replies import ReplyWindows
 from .scrub import scrub
@@ -157,9 +157,13 @@ def _export(_rest: list) -> str:
     pairs = _get_store().exportable()
     if not pairs:
         return "ichor · nothing to export yet\nkeep or share a pair first"
-    path, n = export_dpo.write(pairs, export_dpo.default_dir())
-    shown = str(path).replace(os.path.expanduser("~"), "~", 1)
-    return f"ichor · exported {n} pair{'s' if n != 1 else ''}\n  dpo  {shown}"
+    out_dir = export_dpo.default_dir()
+    path, n = export_dpo.write(pairs, out_dir)
+    env_dir, _ = export_atropos.write(pairs, out_dir)
+    home = os.path.expanduser("~")
+    return (f"ichor · exported {n} pair{'s' if n != 1 else ''}\n"
+            f"  dpo      {str(path).replace(home, '~', 1)}\n"
+            f"  atropos  {str(env_dir).replace(home, '~', 1)}/")
 
 
 def _upload(_rest: list) -> str:
