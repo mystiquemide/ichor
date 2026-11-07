@@ -70,3 +70,8 @@ def test_unknown_shows_help(env):
 
 def test_extra_subcommands(env):
     assert run("export now", extra={"export": lambda rest: f"exported {rest}"}, **env) == "exported ['now']"
+
+
+def test_bare_share_uploads(env):
+    assert run("share", extra={"upload": lambda rest: "uploaded"}, **env) == "uploaded"
+    assert run("share", **env) == "usage: /ichor share <id>"

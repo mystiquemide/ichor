@@ -8,7 +8,7 @@ import threading
 from collections import Counter
 from typing import Any, Optional
 
-from . import card, commands, export_dpo
+from . import card, commands, export_dpo, share_hf
 from .replies import ReplyWindows
 from .scrub import scrub
 from .state import TurnState
@@ -139,7 +139,7 @@ def _cmd_ichor(raw_args: str = "", *, session_id: str = "", platform: str = "", 
     try:
         return commands.run(raw_args, store=_get_store(), state=_state, windows=_windows,
                             session_id=session_id or "", platform=platform or "",
-                            extra={"export": _export})
+                            extra={"export": _export, "upload": _upload})
     except Exception:
         logger.debug("ichor command failed", exc_info=True)
         return "ichor · something went wrong, see agent.log"
@@ -154,6 +154,19 @@ def _export(_rest: list) -> str:
     path, n = export_dpo.write(pairs, export_dpo.default_dir())
     shown = str(path).replace(os.path.expanduser("~"), "~", 1)
     return f"ichor · exported {n} pair{'s' if n != 1 else ''}\n  dpo  {shown}"
+
+
+def _upload(_rest: list) -> str:
+    store = _get_store()
+    pairs = store.to_upload()
+    private = store.setting("hf_private", "1") != "0"
+    try:
+        url, n = share_hf.share(pairs, repo_name=store.setting("hf_repo", "ichor-pairs") or "ichor-pairs",
+                                private=private)
+    except share_hf.ShareError as err:
+        return f"ichor · {err}"
+    store.mark_uploaded([p["id"] for p in pairs], url)
+    return f"ichor · shared {n} pair{'s' if n != 1 else ''} ({'private' if private else 'public'} repo)\n{url}"
 
 
 def register(ctx) -> None:

@@ -12,6 +12,7 @@ HELP = (
     "  /ichor review          next pending pair\n"
     "  /ichor keep <id>       keep private\n"
     "  /ichor share <id>      queue for sharing\n"
+    "  /ichor share           upload queued pairs to HF\n"
     "  /ichor discard <id>    drop it\n"
     "  /ichor export          write dpo.jsonl for TRL\n"
     "  /ichor off | on        pause or resume here\n"
@@ -38,6 +39,8 @@ def run(raw_args: str, *, store: Any, state: Any, windows: Any, session_id: str 
             return "ichor · nothing pending"
         windows.open(pair["id"], platform)
         return card.capture(pair)
+    if sub == "share" and not rest and extra and "upload" in extra:
+        return extra["upload"](rest)
     if sub in _STATUS_WORDS:
         if not rest or not rest[0].lstrip("#").isdigit():
             return f"usage: /ichor {sub} <id>"
