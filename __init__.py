@@ -8,7 +8,7 @@ import threading
 from collections import Counter
 from typing import Any, Optional
 
-from . import card, commands, export_dpo, share_hf
+from . import card, commands, export_dpo, judge, share_hf
 from .replies import ReplyWindows
 from .scrub import scrub
 from .state import TurnState
@@ -85,6 +85,10 @@ def _on_post_llm_call(**kwargs: Any) -> None:
                               platform=kwargs.get("platform"), model=kwargs.get("model"))
             if _post_card(pair_id):
                 _windows.open(pair_id, kwargs.get("platform"))
+            pair = _get_store().get(pair_id)
+            if pair is not None:
+                judge.label_in_background(_ctx, kwargs.get("side_question_token"), pair,
+                                          lambda pid, lab: _get_store().set_category(pid, lab))
     except Exception:
         logger.debug("ichor post_llm_call observer failed", exc_info=True)
 
