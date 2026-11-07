@@ -1,0 +1,47 @@
+name: ci
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          python-version: "3.11"
+      - run: uv run --no-project --with "pytest>=8,<9" python -m pytest tests -q -p no:cacheprovider
+        env:
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+
+  # The same gate the plugin catalog runs on an entry: install the plugin into a real
+  # Hermes and validate manifest, declared hooks vs registrations, security scan and
+  # core-override checks. v0.23.0 is the declared floor; main catches API drift early.
+  catalog-gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        hermes-ref: [v0.23.0, main]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
+        with:
+          python-version: "3.11"
+      - name: Install Hermes ${{ matrix.hermes-ref }}
+        run: uv tool install --python 3.11 "hermes-agent @ git+https://github.com/NousResearch/hermes-agent@${{ matrix.hermes-ref }}"
+      - name: hermes plugins validate --install-deps
+        run: |
+          export HERMES_HOME="$RUNNER_TEMP/hermes-home"
+          mkdir -p "$HERMES_HOME"
+          hermes --version
+          timeout 600 hermes plugins validate --install-deps . </dev/null
