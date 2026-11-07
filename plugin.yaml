@@ -9,5 +9,9 @@ provides_hooks:
   - post_llm_call
   - on_session_finalize
   - post_gateway_admission
+optional_env:
+  - name: HF_TOKEN
+    description: Hugging Face token with write access to your own repos, used only by /ichor share
+    url: https://huggingface.co/settings/tokens
 capabilities:
   - llm.side_question

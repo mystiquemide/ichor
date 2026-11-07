@@ -92,3 +92,19 @@ def test_odd_whoami_payload_is_a_share_error():
             return super().__call__(req)
     with pytest.raises(ShareError, match="rejected the token"):
         share(_pairs(), token="t", opener=ListHub())
+
+
+def test_token_comes_from_hermes_secret_route(monkeypatch):
+    import sys, types
+    import ichor.share_hf as mod
+    fake = types.ModuleType("agent.secret_scope")
+    fake.get_secret = lambda name, default=None: "scoped-token" if name == "HF_TOKEN" else None
+    monkeypatch.setitem(sys.modules, "agent", types.ModuleType("agent"))
+    monkeypatch.setitem(sys.modules, "agent.secret_scope", fake)
+    monkeypatch.setenv("HF_TOKEN", "process-env-token")
+    assert mod._hf_token() == "scoped-token"
+
+    def unscoped(name, default=None):
+        raise RuntimeError("unscoped under multiplexing")
+    fake.get_secret = unscoped
+    assert mod._hf_token() == ""

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 import time
 import urllib.error
 import urllib.request
@@ -66,10 +65,26 @@ def _call(method: str, path: str, token: str, *, body: Optional[bytes] = None, c
         return err.code, detail
 
 
+def _hf_token() -> str:
+    """Read the token through Hermes's profile-scoped secret route (catalog rule 11), never os.environ."""
+    try:
+        from agent.secret_scope import get_secret
+    except ImportError:
+        return ""
+    for name in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN"):
+        try:
+            value = get_secret(name)
+        except Exception:  # unscoped under multiplexing: fail closed
+            return ""
+        if value:
+            return value
+    return ""
+
+
 def share(pairs: list[dict[str, Any]], *, token: Optional[str] = None, repo_name: str = "ichor-pairs",
           private: bool = True, opener: Opener = _default_open) -> tuple[str, int]:
     """Upload pairs as one new JSONL file. Returns (dataset_url, rows). Raises ShareError with a user message."""
-    token = token or os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+    token = token or _hf_token()
     if not token:
         raise ShareError("sharing needs a Hugging Face token\nadd HF_TOKEN to ~/.hermes/.env, then /ichor share")
     if not pairs:
