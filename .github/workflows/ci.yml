@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
         with:
-          python-version: "3.11"
+          python-version: "3.14"
       - run: uv run --no-project --with "pytest>=8,<9" python -m pytest tests -q -p no:cacheprovider
         env:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
@@ -36,12 +36,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2  # v10.3.3
         with:
-          python-version: "3.11"
-      - name: Install Hermes ${{ matrix.hermes-ref }}
-        run: uv tool install --python 3.11 "hermes-agent @ git+https://github.com/NousResearch/hermes-agent@${{ matrix.hermes-ref }}"
+          python-version: "3.14"
+      - name: Check out Hermes ${{ matrix.hermes-ref }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          repository: NousResearch/hermes-agent
+          ref: ${{ matrix.hermes-ref }}
+          path: hermes-src
+      - name: Install Hermes from source (Hermes doesn't build wheels)
+        run: uv sync --frozen --project hermes-src
       - name: hermes plugins validate --install-deps
         run: |
           export HERMES_HOME="$RUNNER_TEMP/hermes-home"
           mkdir -p "$HERMES_HOME"
-          hermes --version
-          timeout 600 hermes plugins validate --install-deps . </dev/null
+          mkdir -p "$RUNNER_TEMP/ichor" && git ls-files -z | xargs -0 cp --parents -t "$RUNNER_TEMP/ichor"
+          hermes-src/.venv/bin/hermes --version
+          timeout 600 hermes-src/.venv/bin/hermes plugins validate --install-deps "$RUNNER_TEMP/ichor" </dev/null

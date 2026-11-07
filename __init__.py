@@ -176,5 +176,5 @@ def register(ctx) -> None:
         "ichor",
         _cmd_ichor,
         description="Corrections captured as preference pairs",
-        args_hint="[status|review|keep|share|discard|off|on|help]",
+        args_hint="[review|keep|share|discard <id>|export|share|set|off|on|forget-all|help]",
     )
