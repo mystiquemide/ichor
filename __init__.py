@@ -8,7 +8,7 @@ import threading
 from collections import Counter
 from typing import Any, Optional
 
-from . import card, commands
+from . import card, commands, export_dpo
 from .replies import ReplyWindows
 from .scrub import scrub
 from .state import TurnState
@@ -138,10 +138,22 @@ def _on_session_finalize(**kwargs: Any) -> None:
 def _cmd_ichor(raw_args: str = "", *, session_id: str = "", platform: str = "", **kwargs: Any) -> str:
     try:
         return commands.run(raw_args, store=_get_store(), state=_state, windows=_windows,
-                            session_id=session_id or "", platform=platform or "")
+                            session_id=session_id or "", platform=platform or "",
+                            extra={"export": _export})
     except Exception:
         logger.debug("ichor command failed", exc_info=True)
         return "ichor · something went wrong, see agent.log"
+
+
+def _export(_rest: list) -> str:
+    import os
+
+    pairs = _get_store().exportable()
+    if not pairs:
+        return "ichor · nothing to export yet\nkeep or share a pair first"
+    path, n = export_dpo.write(pairs, export_dpo.default_dir())
+    shown = str(path).replace(os.path.expanduser("~"), "~", 1)
+    return f"ichor · exported {n} pair{'s' if n != 1 else ''}\n  dpo  {shown}"
 
 
 def register(ctx) -> None:

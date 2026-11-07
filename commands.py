@@ -13,6 +13,7 @@ HELP = (
     "  /ichor keep <id>       keep private\n"
     "  /ichor share <id>      queue for sharing\n"
     "  /ichor discard <id>    drop it\n"
+    "  /ichor export          write dpo.jsonl for TRL\n"
     "  /ichor off | on        pause or resume here\n"
     "  /ichor off --global    pause everywhere\n"
     "  /ichor forget-all yes  delete every pair"

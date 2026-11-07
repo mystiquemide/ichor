@@ -1,0 +1,4 @@
+# Only for the examples. The plugin itself has no dependencies.
+trl>=1.17,<2
+datasets>=5,<6
+transformers>=5,<6
