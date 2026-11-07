@@ -8,7 +8,7 @@ import threading
 from collections import Counter
 from typing import Any, Optional
 
-from . import card
+from . import card, commands
 from .replies import ReplyWindows
 from .scrub import scrub
 from .state import TurnState
@@ -71,6 +71,8 @@ def _record(signal, *, session_id, turn_id, platform, model) -> int:
 def _on_post_llm_call(**kwargs: Any) -> None:
     """Observer only: compare this turn with the previous one. Never raises."""
     try:
+        if _get_store().setting("global_off") == "1":
+            return
         signal = _state.observe(
             session_id=kwargs.get("session_id"),
             user_message=kwargs.get("user_message"),
@@ -133,13 +135,13 @@ def _on_session_finalize(**kwargs: Any) -> None:
         logger.debug("ichor on_session_finalize failed", exc_info=True)
 
 
-def _cmd_ichor(raw_args: str = "", **kwargs: Any) -> str:
+def _cmd_ichor(raw_args: str = "", *, session_id: str = "", platform: str = "", **kwargs: Any) -> str:
     try:
-        c = _get_store().counts()
+        return commands.run(raw_args, store=_get_store(), state=_state, windows=_windows,
+                            session_id=session_id or "", platform=platform or "")
     except Exception:
-        logger.debug("ichor status failed", exc_info=True)
-        return "ichor · store unavailable"
-    return card.status(c, _get_store().top_categories())
+        logger.debug("ichor command failed", exc_info=True)
+        return "ichor · something went wrong, see agent.log"
 
 
 def register(ctx) -> None:
@@ -152,5 +154,5 @@ def register(ctx) -> None:
         "ichor",
         _cmd_ichor,
         description="Corrections captured as preference pairs",
-        args_hint="[status]",
+        args_hint="[status|review|keep|share|discard|off|on|help]",
     )
