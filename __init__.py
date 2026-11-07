@@ -20,6 +20,9 @@ PLUGIN_NAME = "ichor"
 _state = TurnState()
 _store: Optional[Store] = None
 _store_lock = threading.Lock()
+_ctx: Any = None
+_cards: dict[int, Any] = {}  # pair id -> message handle, for in-place edits
+_CARDS_MAX = 64
 
 
 def _get_store() -> Store:
@@ -74,10 +77,28 @@ def _on_post_llm_call(**kwargs: Any) -> None:
             platform=kwargs.get("platform"),
         )
         if signal is not None:
-            _record(signal, session_id=kwargs.get("session_id"), turn_id=kwargs.get("turn_id"),
-                    platform=kwargs.get("platform"), model=kwargs.get("model"))
+            pair_id = _record(signal, session_id=kwargs.get("session_id"), turn_id=kwargs.get("turn_id"),
+                              platform=kwargs.get("platform"), model=kwargs.get("model"))
+            _post_card(pair_id)
     except Exception:
         logger.debug("ichor post_llm_call observer failed", exc_info=True)
+
+
+def _post_card(pair_id: int) -> bool:
+    """Post the capture card into the current conversation. Refused outside a live gateway: the pair stays pending."""
+    if _ctx is None or not hasattr(_ctx, "post_message"):
+        return False
+    pair = _get_store().get(pair_id)
+    if pair is None:
+        return False
+    handle = _ctx.post_message(card.capture(pair))
+    if not getattr(handle, "ok", False):
+        logger.debug("ichor card not posted: %s", getattr(handle, "result", None))
+        return False
+    _cards[pair_id] = handle
+    while len(_cards) > _CARDS_MAX:
+        _cards.pop(next(iter(_cards)))
+    return True
 
 
 def _on_session_finalize(**kwargs: Any) -> None:
@@ -98,6 +119,8 @@ def _cmd_ichor(raw_args: str = "", **kwargs: Any) -> str:
 
 
 def register(ctx) -> None:
+    global _ctx
+    _ctx = ctx
     ctx.register_hook("post_llm_call", _on_post_llm_call)
     ctx.register_hook("on_session_finalize", _on_session_finalize)
     ctx.register_command(
