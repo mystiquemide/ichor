@@ -60,7 +60,7 @@ def test_top_categories(store):
     for cat in ["package manager", "package manager", "verbosity"]:
         store.set_category(store.add(_pair()), cat)
     store.add(_pair(kind="retry"))
-    assert store.top_categories() == [("package manager", 2), ("retry", 1), ("verbosity", 1)]
+    assert store.top_categories() == [("package manager", 2), ("other", 1), ("verbosity", 1)]
 
 
 def test_forget_all_and_settings(store):
@@ -88,3 +88,8 @@ def test_discard_clears_text_and_sticks(store):
     assert (got["prompt"], got["rejected"], got["accepted"], got["feedback"]) == ("", "", "", "")
     assert not store.set_status(pid, "kept")  # a dropped pair can't come back with empty text
     assert store.get(pid)["status"] == "discarded"
+
+
+def test_unlabeled_pairs_show_as_other(store):
+    store.add(_pair())
+    assert [c for c, _ in store.top_categories()] == ["other"]

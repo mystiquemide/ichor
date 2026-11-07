@@ -15,7 +15,7 @@ _RULES: list[tuple[str, re.Pattern[str]]] = [
     ("ignored instruction", re.compile(r"\b(?:i said|i asked|i told you|as i said|you ignored|you forgot|you missed)\b", re.I)),
     ("did not work", re.compile(r"\b(?:didn'?t work|doesn'?t work|not working|still (?:broken|failing|wrong)|error|broke)\b", re.I)),
     ("unsafe default", re.compile(r"\b(?:localhost only|bind (?:it )?to localhost|privileged|root|sudo|unsafe|insecure)\b", re.I)),
-    ("missing option", re.compile(r"\b(?:also|include|add|with|make it|and (?:also )?(?:show|sort|follow))\b", re.I)),
+    ("missing option", re.compile(r"\b(?:also|include|exclude|skip|ignore|without|add|with|make it|and (?:also )?(?:show|sort|follow))\b", re.I)),
 ]
 
 _SWAP = re.compile(r"\b(?:use|try|with)\s+([\w./+-]+)(?:\s+(?:instead of|not|rather than|over)\s+([\w./+-]+))?", re.I)

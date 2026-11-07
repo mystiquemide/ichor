@@ -27,3 +27,8 @@ def test_retry_undo_and_unknown():
     assert lab("", kind="retry") == "retried answer"
     assert lab("", kind="undo") == "changed the ask"
     assert lab("hmm no") is None
+
+
+def test_exclusions_are_missing_options():
+    for fb in ("no, exclude node_modules", "skip the hidden files", "without the header please"):
+        assert rule_label({"kind": "correction", "feedback": fb}) == "missing option", fb

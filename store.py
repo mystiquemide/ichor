@@ -130,7 +130,7 @@ class Store:
 
     def top_categories(self, limit: int = 3) -> list[tuple[str, int]]:
         rows = self._all(
-            "SELECT COALESCE(category, kind) AS c, COUNT(*) AS n FROM pairs "
+            "SELECT COALESCE(category, 'other') AS c, COUNT(*) AS n FROM pairs "
             "WHERE status IN ('kept','shared','pending') GROUP BY c ORDER BY n DESC, c ASC LIMIT ?", (limit,))
         return [(r["c"], r["n"]) for r in rows]
 
