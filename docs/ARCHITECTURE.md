@@ -63,11 +63,13 @@ Input on turn N+1: previous turn (u_N, a_N, history_len_N) and current turn (u_N
 | Kind | Rule | Confidence |
 |------|------|-----------|
 | retry | normalized u_N1 == normalized u_N and history_len_N1 <= history_len_N | high |
-| undo | history_len_N1 < history_len_N - 1 (turns removed) and u_N1 differs | medium; prompt = u_N1, rejected = a_N |
+| undo | history_len_N1 <= history_len_N (history did not grow) and u_N1 differs | medium; prompt = u_N1, rejected = a_N |
 | correction | u_N1 starts with or contains a correction pattern ("no,", "nope", "wrong", "that's not", "instead", "actually", "use X not Y", "don't", "stop", "you forgot") and a_N exists | medium; boosted if short (< 200 chars) |
 | none | anything else | n/a |
 
-Guards: skip if a_N is empty, if either side is a tool-only turn with no text, if platform is cron or subagent, or if Ichor is off for the session.
+Verified live on Telegram (Hermes v0.23.0, 2026-11-07): a normal turn grows history by 2 or more (more with tool calls). /retry re-sends the same user text and history_len stays equal (8 -> 8). /undo then a new prompt also leaves history_len equal (10 -> 10) with different user text. /retry, /undo and plugin slash commands do not fire post_llm_call themselves.
+
+Guards: skip if normalized a_N1 == normalized a_N (a retry that produced the same answer is not a preference), skip if a_N is empty, if either side is a tool-only turn with no text, if platform is cron or subagent, or if Ichor is off for the session.
 
 Pair shape:
 - retry: prompt = u_N, rejected = a_N, accepted = a_N1
