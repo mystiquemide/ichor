@@ -5,42 +5,61 @@ from __future__ import annotations
 import json
 import logging
 import threading
-import time
 from collections import Counter
-from typing import Any
+from typing import Any, Optional
 
-from .scrub import scrub, summarize
+from .scrub import scrub
 from .state import TurnState
+from .store import Store
 
 logger = logging.getLogger("ichor")
 
 PLUGIN_NAME = "ichor"
 
 _state = TurnState()
-_write_lock = threading.Lock()
+_store: Optional[Store] = None
+_store_lock = threading.Lock()
 
 
-def _data_dir():
-    from plugins.plugin_storage import plugin_data_dir
+def _get_store() -> Store:
+    global _store
+    with _store_lock:
+        if _store is None:
+            _store = Store.open_default()
+            _import_legacy_jsonl(_store)
+        return _store
 
-    return plugin_data_dir(PLUGIN_NAME)
+
+def _import_legacy_jsonl(store: Store) -> None:
+    """One-time move of pairs captured before the SQLite store existed."""
+    try:
+        from plugins.plugin_storage import plugin_data_dir
+
+        path = plugin_data_dir(PLUGIN_NAME) / "signals.jsonl"
+        if not path.exists():
+            return
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                row = json.loads(line)
+                row["scrub_counts"] = row.pop("scrub", {})
+                store.add(row)
+        path.rename(path.with_suffix(".jsonl.imported"))
+    except Exception:
+        logger.debug("ichor legacy import failed", exc_info=True)
 
 
-def _record(signal, *, session_id, turn_id, platform, model) -> dict:
+def _record(signal, *, session_id, turn_id, platform, model) -> int:
     fields: dict[str, str] = {}
     total: Counter = Counter()
     for name in ("prompt", "rejected", "accepted", "feedback"):
         text, counts = scrub(getattr(signal, name))
         fields[name] = text
         total += counts
-    row = {
-        "ts": time.time(), "session_id": session_id, "turn_id": turn_id, "platform": platform,
-        "model": model, "kind": signal.kind, "confidence": signal.confidence, "reason": signal.reason,
-        "scrub": dict(total), "scrub_summary": summarize(total), **fields,
-    }
-    with _write_lock, open(_data_dir() / "signals.jsonl", "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row) + "\n")
-    return row
+    return _get_store().add({
+        "session_id": session_id, "turn_id": turn_id, "platform": platform, "model": model,
+        "kind": signal.kind, "confidence": signal.confidence, "reason": signal.reason,
+        "scrub_counts": dict(total), **fields,
+    })
 
 
 def _on_post_llm_call(**kwargs: Any) -> None:
@@ -70,13 +89,13 @@ def _on_session_finalize(**kwargs: Any) -> None:
 
 def _cmd_ichor(raw_args: str = "", **kwargs: Any) -> str:
     try:
-        path = _data_dir() / "signals.jsonl"
-        n = sum(1 for _ in open(path, encoding="utf-8")) if path.exists() else 0
+        c = _get_store().counts()
     except Exception:
-        n = 0
-    if n == 0:
+        logger.debug("ichor status failed", exc_info=True)
+        return "ichor · store unavailable"
+    if not any(c.values()):
         return 'ichor · no corrections yet\nlistening for "no...", /retry and /undo'
-    return f"ichor · {n} pair{'s' if n != 1 else ''} captured"
+    return f"ichor · {c['kept']} kept · {c['shared']} shared · {c['pending']} pending"
 
 
 def register(ctx) -> None:
