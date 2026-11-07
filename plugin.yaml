@@ -7,4 +7,4 @@ homepage: https://github.com/mystiquemide/ichor
 requires_hermes: ">=0.23.0"
 provides_hooks:
   - post_llm_call
-  - on_session_end
+  - on_session_finalize
