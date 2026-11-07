@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from typing import Mapping
 
 # Order matters: specific token formats run before generic patterns.
 _RULES: list[tuple[str, re.Pattern[str], str]] = [
@@ -49,7 +50,7 @@ def scrub(text: str | None) -> tuple[str, Counter]:
     return out, counts
 
 
-def summarize(counts: Counter) -> str:
+def summarize(counts: Mapping[str, int]) -> str:
     """Card line, e.g. '1 path · 2 secrets'."""
     secrets = sum(v for k, v in counts.items() if k in SECRET_KINDS)
     paths = counts.get("home_path", 0)

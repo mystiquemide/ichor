@@ -8,6 +8,7 @@ import threading
 from collections import Counter
 from typing import Any, Optional
 
+from . import card
 from .scrub import scrub
 from .state import TurnState
 from .store import Store
@@ -93,9 +94,7 @@ def _cmd_ichor(raw_args: str = "", **kwargs: Any) -> str:
     except Exception:
         logger.debug("ichor status failed", exc_info=True)
         return "ichor · store unavailable"
-    if not any(c.values()):
-        return 'ichor · no corrections yet\nlistening for "no...", /retry and /undo'
-    return f"ichor · {c['kept']} kept · {c['shared']} shared · {c['pending']} pending"
+    return card.status(c, _get_store().top_categories())
 
 
 def register(ctx) -> None:
