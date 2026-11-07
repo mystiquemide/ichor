@@ -9,6 +9,7 @@ from collections import Counter
 from typing import Any, Optional
 
 from . import card
+from .replies import ReplyWindows
 from .scrub import scrub
 from .state import TurnState
 from .store import Store
@@ -23,6 +24,7 @@ _store_lock = threading.Lock()
 _ctx: Any = None
 _cards: dict[int, Any] = {}  # pair id -> message handle, for in-place edits
 _CARDS_MAX = 64
+_windows = ReplyWindows()
 
 
 def _get_store() -> Store:
@@ -79,7 +81,8 @@ def _on_post_llm_call(**kwargs: Any) -> None:
         if signal is not None:
             pair_id = _record(signal, session_id=kwargs.get("session_id"), turn_id=kwargs.get("turn_id"),
                               platform=kwargs.get("platform"), model=kwargs.get("model"))
-            _post_card(pair_id)
+            if _post_card(pair_id):
+                _windows.open(pair_id, kwargs.get("platform"))
     except Exception:
         logger.debug("ichor post_llm_call observer failed", exc_info=True)
 
@@ -99,6 +102,27 @@ def _post_card(pair_id: int) -> bool:
     while len(_cards) > _CARDS_MAX:
         _cards.pop(next(iter(_cards)))
     return True
+
+
+async def _on_post_gateway_admission(**kwargs: Any) -> Optional[dict]:
+    """Claim a one-character card reply. Anything else returns None and reaches the agent."""
+    try:
+        hit = _windows.match(text=kwargs.get("text"), platform=kwargs.get("platform"), source=kwargs.get("source"))
+        if hit is None:
+            return None
+        pair_id, status = hit
+        if not _get_store().set_status(pair_id, status):
+            return None
+        handle = _cards.pop(pair_id, None)
+        text = card.collapsed(pair_id, status)
+        if handle is not None and hasattr(handle, "aedit"):
+            await handle.aedit(text)
+            if getattr(handle, "ok", False):
+                return {"action": "handled"}
+        return {"action": "handled", "reply": text}
+    except Exception:
+        logger.debug("ichor admission hook failed", exc_info=True)
+        return None
 
 
 def _on_session_finalize(**kwargs: Any) -> None:
@@ -123,6 +147,7 @@ def register(ctx) -> None:
     _ctx = ctx
     ctx.register_hook("post_llm_call", _on_post_llm_call)
     ctx.register_hook("on_session_finalize", _on_session_finalize)
+    ctx.register_hook("post_gateway_admission", _on_post_gateway_admission)
     ctx.register_command(
         "ichor",
         _cmd_ichor,
