@@ -1,0 +1,8 @@
+memory.md
+AGENTS.md
+CLAUDE.md
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+exports/
