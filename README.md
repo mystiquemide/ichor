@@ -1,5 +1,7 @@
 # ichor
 
+[![ci](https://github.com/mystiquemide/ichor/actions/workflows/ci.yml/badge.svg)](https://github.com/mystiquemide/ichor/actions/workflows/ci.yml)
+
 Every correction is training data.
 
 When you correct Hermes, Ichor pairs the answer you rejected with the one you accepted, scrubs it on your machine, and asks you once what to do with it. Kept pairs export as TRL preference data and as an Atropos environment, ready to fine-tune or run RL on your own model.
@@ -130,6 +132,8 @@ The held-out number is the one to trust. About one card in four is a false alarm
 hermes plugins validate . --install-deps   # every check passes, security scan safe, no core overrides
 python -m pytest tests -q                  # all tests pass, no network needed
 ```
+
+CI runs the tests on Linux, macOS and Windows, and runs the plugin catalog's own `validate --install-deps` gate against Hermes v0.23.0 and Hermes main on every push.
 
 ## Privacy
 
