@@ -89,10 +89,10 @@ python examples/train_one_step.py <export>/dpo.jsonl
 python examples/atropos_smoke.py  <export>/atropos_env     # needs NousResearch/atropos installed
 ```
 
-On two pairs captured on Telegram, `train_one_step.py` runs DPOTrainer on CPU with TRL's tiny test model, and the loss falls on every step:
+On three pairs captured on Telegram, `train_one_step.py` runs DPOTrainer on CPU with TRL's tiny test model, and the loss falls on every step:
 
 ```
-DPOTrainer ran 8 step(s) on 2 Ichor pairs. losses: [0.6931, 0.6885, 0.6851, 0.682, 0.6792, 0.677, 0.6751, 0.6738]
+DPOTrainer ran 8 step(s) on 3 Ichor pairs. losses: [0.6931, 0.6894, 0.6864, 0.6839, 0.6817, 0.68, 0.6786, 0.6776]
 ```
 
 The Atropos environment scores rollouts without an inference server:
@@ -103,7 +103,7 @@ The Atropos environment scores rollouts without an inference server:
   unrelated answer  reward -0.05  tokens 54  trained 10
 ```
 
-This proves the format and the pipeline. Two pairs on a tiny model don't teach anything useful. That takes many real pairs.
+This proves the format and the pipeline. Three pairs on a tiny model don't teach anything useful. That takes many real pairs.
 
 ## Reliability
 
