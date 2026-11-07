@@ -20,11 +20,12 @@ _RULES: list[tuple[str, re.Pattern[str], str]] = [
     ("telegram_bot_token", re.compile(r"\b\d{8,10}:[A-Za-z0-9_\-]{35}\b"), "[REDACTED:telegram_bot_token]"),
     ("jwt", re.compile(r"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}"), "[REDACTED:jwt]"),
     ("bearer", re.compile(r"(?i)\bbearer\s+[A-Za-z0-9._\-~+/]{16,}=*"), "Bearer [REDACTED:bearer]"),
-    ("url_credentials", re.compile(r"(?i)\b([a-z][a-z0-9+.\-]*://)[^\s:/@]+:[^\s/@]+@"), r"\1[REDACTED:credentials]@"),
+    ("url_credentials", re.compile(r"(?i)\b([a-z][a-z0-9+.\-]{0,15}://)[^\s:/@]{1,256}:[^\s/@]{1,256}@"), r"\1[REDACTED:credentials]@"),
     ("secret_assignment", re.compile(
         r"(?i)\b([A-Z0-9_]*(?:API_?KEY|SECRET|TOKEN|PASSWORD|PASSWD|PWD)[A-Z0-9_]*)(\s*[=:]\s*)(['\"]?)([^\s'\"]{6,})\3"),
         r"\1\2\3[REDACTED:secret]\3"),
-    ("email", re.compile(r"\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b"), "[REDACTED:email]"),
+    # Bounded lengths (RFC 5321 limits) keep this linear on long text with no "@".
+    ("email", re.compile(r"(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]{1,64}@[A-Za-z0-9\-]{1,63}(?:\.[A-Za-z0-9\-]{1,63}){0,8}\.[A-Za-z]{2,24}\b"), "[REDACTED:email]"),
     ("ipv4", re.compile(r"\b(?!(?:127|0)\.)(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b"), "[REDACTED:ip]"),
     ("phone", re.compile(r"(?<![\w.])\+\d{1,3}[\s\-]?\(?\d{2,4}\)?(?:[\s\-]?\d{3,4}){2}(?![\w.])"), "[REDACTED:phone]"),
     ("home_path", re.compile(r"(?:/home/|/Users/)[A-Za-z0-9._\-]+|[A-Za-z]:\\Users\\[A-Za-z0-9._\-]+"), "~"),
