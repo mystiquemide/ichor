@@ -22,8 +22,10 @@ def main() -> None:
     tok = AutoTokenizer.from_pretrained(model_id)
     model = AutoModelForCausalLM.from_pretrained(model_id)
     with tempfile.TemporaryDirectory() as out:
-        args = DPOConfig(output_dir=out, max_steps=steps, per_device_train_batch_size=len(ds) if len(ds) < 8 else 8,
-                         learning_rate=5e-4, logging_steps=1, report_to=[], save_strategy="no", use_cpu=True)
+        args = DPOConfig(output_dir=out, max_steps=steps, per_device_train_batch_size=2,
+                         gradient_accumulation_steps=max(1, min(len(ds), 8) // 2),
+                         learning_rate=5e-4, logging_steps=1, report_to=[], save_strategy="no", use_cpu=True,
+                         max_length=512, truncation_mode="keep_end")  # logits are batch x 512 x 152k vocab: small batches fit a laptop
         trainer = DPOTrainer(model=model, args=args, train_dataset=ds, processing_class=tok)
         result = trainer.train()
     losses = [round(h["loss"], 4) for h in trainer.state.log_history if "loss" in h]
