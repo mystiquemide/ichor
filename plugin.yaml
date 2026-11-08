@@ -1,5 +1,5 @@
 name: ichor
-version: "0.1.0"
+version: "0.1.1"
 description: "Catches the moments you correct Hermes and turns them into preference pairs you can train on. Local-first; nothing leaves your machine unless you share it."
 author: "Mystique Mide"
 license: MIT
