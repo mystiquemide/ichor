@@ -70,3 +70,11 @@ def test_compression_shrink_is_not_an_undo():
 def test_multi_turn_undo_is_still_an_undo():
     sig = detect(Turn("deploy to prod", "Deploying.", 20), Turn("deploy to staging", "Staging.", 16))
     assert sig is not None and sig.kind == "undo"
+
+
+def test_retry_with_only_punctuation_or_markdown_changes_is_skipped():
+    prev = Turn("suggest one short name for a gold-themed cat", "Midas", 4)
+    assert detect(prev, Turn("suggest one short name for a gold-themed cat", "Midas.", 4)) is None
+    assert detect(prev, Turn("suggest one short name for a gold-themed cat", "**Midas**", 4)) is None
+    sig = detect(prev, Turn("suggest one short name for a gold-themed cat", "Aurelia", 4))
+    assert sig is not None and sig.kind == "retry"

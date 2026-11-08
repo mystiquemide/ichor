@@ -57,6 +57,13 @@ def _norm(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "").strip().lower())
 
 
+def _same_answer(a: str, b: str) -> bool:
+    """Answers that differ only in case, spacing, punctuation or markdown are the same answer."""
+    def key(t: str) -> str:
+        return re.sub(r"[\W_]+", "", (t or "").lower())
+    return key(a) == key(b)
+
+
 def _ends_with_question(text: str) -> bool:
     tail = (text or "").strip()[-300:]
     return tail.endswith("?")
@@ -73,7 +80,7 @@ def detect(prev: Optional[Turn], cur: Turn, min_confidence: str = "medium") -> O
     """Return a Signal when cur shows prev's answer was rejected, else None."""
     if prev is None or not (prev.assistant or "").strip() or not (cur.assistant or "").strip():
         return None
-    if _norm(prev.assistant) == _norm(cur.assistant):
+    if _same_answer(prev.assistant, cur.assistant):
         return None
 
     grew = cur.history_len > prev.history_len
