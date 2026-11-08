@@ -4,7 +4,7 @@
 
 Every correction is training data.
 
-When you correct Hermes, Ichor pairs the answer you rejected with the one you accepted, scrubs it on your machine, and asks you once what to do with it. Kept pairs export as TRL preference data and as an Atropos environment, ready to fine-tune or run RL on your own model.
+A [Hermes Agent](https://github.com/NousResearch/hermes-agent) plugin. When you correct Hermes, in the CLI or in a gateway chat like Telegram, Ichor pairs the answer you rejected with the one you accepted, scrubs it on your machine, and asks you once what to do with it. Kept pairs export as TRL preference data and as an environment for [Atropos](https://github.com/NousResearch/atropos), Nous Research's RL framework, so the corrections you give Hermes can train the next model you run under it.
 
 ```
 you        one-line command to show disk usage of the current folder
@@ -27,7 +27,7 @@ That exchange is real, captured on Telegram with Hermes v0.23.0.
 
 ## Why you'd want it
 
-Every "no, use pnpm", every `/retry`, every "I said the design team, not everyone" is a labeled preference pair: a prompt, a bad answer, and the answer you wanted. That is the data DPO and reward models train on, and today it disappears when the session ends.
+Every "no, use pnpm", every Hermes `/retry`, every `/undo` followed by a better ask is a labeled preference pair: a prompt, a bad answer, and the answer you wanted. That is the data DPO and reward models train on. Hermes already keeps your sessions and can export traces, but nothing in a trace says which answer you rejected, so that signal is lost when the session ends.
 
 Ichor keeps it, with no extra work from you:
 
@@ -38,17 +38,21 @@ Ichor keeps it, with no extra work from you:
 
 ## Install
 
+Needs Hermes v0.23.0 or newer.
+
 ```bash
-hermes plugins install mystiquemide/ichor
+hermes plugins install mystiquemide/ichor   # `hermes plugins install ichor` once the catalog entry is merged
 hermes plugins enable ichor
 ```
 
-That's it. Correct Hermes once in a direct chat and a card appears.
+That's it. The gateway picks the plugin up without a restart. Correct Hermes once in a direct chat and a card appears. To stop it, `hermes plugins disable ichor`, or `/ichor off` for one chat.
+
+Ichor is per profile, like the rest of Hermes: each profile in `~/.hermes/profiles/<name>/` keeps its own pairs and settings in its own plugin data directory.
 
 Optional:
 
 - For `/ichor share`, add a Hugging Face token with write access to your own repos: `HF_TOKEN=hf_...` in `~/.hermes/.env`.
-- `hermes plugins enable` asks once for `llm.side_question`. With it, Ichor asks your agent for a 2 to 4 word mistake label after each captured pair: one short call per pair, never per turn. Say no and Ichor labels mistakes locally from your own words.
+- `hermes plugins enable` asks once for the `llm.side_question` capability, Hermes's consent gate for plugins that talk to your agent. With it, Ichor asks your agent for a 2 to 4 word mistake label after each captured pair: one short call per pair, never per turn. Say no and Ichor labels mistakes locally from your own words.
 
 ## Using it
 
@@ -141,9 +145,9 @@ CI runs the tests on Linux, macOS and Windows, and runs the plugin catalog's own
 - Pairs live in `~/.hermes/plugin-data/ichor/ichor.db`, inside your profile.
 - The only network call is `/ichor share`, to `huggingface.co` with your token. New repos are private unless you run `/ichor set public`.
 
-## Why it's a plugin
+## How it fits into Hermes
 
-A prompt or a skill only runs when you ask for it, and nobody asks in the moment they're annoyed. Ichor uses surfaces only a plugin gets:
+A prompt or a skill only runs when you ask for it, and nobody asks in the moment they're annoyed. Ichor runs inside Hermes's turn loop and uses surfaces only a plugin gets, all through the public plugin API with no core patches (`hermes plugins validate` checks this):
 
 | Hermes surface | What Ichor uses it for |
 |---|---|
@@ -153,6 +157,9 @@ A prompt or a skill only runs when you ask for it, and nobody asks in the moment
 | `ctx.side_question` (optional) | Asks the session's own agent to name the mistake |
 | Plugin data directory | Durable SQLite store that follows your profile |
 | `on_session_finalize` hook | Drops per-session state when a session really ends |
+| `ctx.register_command` | The `/ichor` command and its subcommands |
+
+It reads Hermes's own signals: `/retry` re-sends the same message without growing the history, `/undo` rolls history back before a new ask, and a correction is the next message after an answer. Cron, subagent and batch turns are skipped, so only conversations with you produce pairs. Where Hermes can't post a message into the conversation, the pair is still stored and waits for `/ichor review`.
 
 ## Limitations
 
